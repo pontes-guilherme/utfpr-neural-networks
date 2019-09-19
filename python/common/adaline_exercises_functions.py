@@ -1,4 +1,5 @@
 from math import pi, sin, cos
+import random
 
 
 def f1(z):
@@ -28,5 +29,17 @@ def pre_processing(size=15):
         X.append([f1(n), f2(n), f3(n)])
         y.append(f(n))
         n += step
+
+    return X, y
+
+
+def generate_random_cases(size=15):
+    X = []
+    y = []
+
+    for i in range(size):
+        n = random.uniform(0, 2*pi)
+        X.append([f1(n), f2(n), f3(n)])
+        y.append(f(n))
 
     return X, y
