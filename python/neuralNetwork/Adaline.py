@@ -7,7 +7,7 @@ class Adaline(object):
     _labels = []
 
     def __init__(self, training_sets_list, results_list, labels=None, eta=0.1,
-                 epochs=100, uses_batch=False, batch_error_threshold=0.01):
+                 epochs=100, uses_batch=False, error_threshold=0.01):
 
         self._neurons = []
         self._labels = labels if labels else []
@@ -16,13 +16,13 @@ class Adaline(object):
 
         for X, y in zip(training_sets_list, results_list):
             n = AdalineNeuron(eta, epochs, uses_batch,
-                              batch_error_threshold)
+                              error_threshold)
 
             n.train(X, y)
             self._neurons.append(n)
 
             if not labels:
-                self._labels.append('Neuron %s:' % i)
+                self._labels.append('Neuron %s' % i)
 
             i += 1
 
