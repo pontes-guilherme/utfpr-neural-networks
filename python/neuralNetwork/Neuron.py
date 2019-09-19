@@ -6,12 +6,14 @@ class Neuron(object):
     _weights = []
 
     def __init__(self, eta=0.1, epochs=100, uses_batch=False,
-                 error_threshold=0.01):
+                 error_threshold=0.01, validation_X=None, validation_y=None):
         self._eta = eta
         self._epochs = epochs
         self._bias = 1
         self._uses_batch = uses_batch
         self._error_threshold = error_threshold
+        self._validation_X = validation_X
+        self._validation_y = validation_y
 
     def get_uses_batch(self):
         return self._uses_batch
@@ -53,7 +55,11 @@ class Neuron(object):
                          d_w in zip(self.get_weights(), delta_w)]
 
     def print_weights(self):
-        print('\n', self.get_weights(), '\n')
+        print("\n")
+        print('#'*50)
+        print('Bias and [list of weights]')
+        print(self.get_bias(), self.get_weights())
+        print('#'*50)
 
     def train(self, X, y):
         print("\nStarting neuron training...")
@@ -78,6 +84,19 @@ class Neuron(object):
                 else:
                     sum_error_w_batch = [last_delta + (self.get_eta()*error*x_i)
                                          for x_i, last_delta in zip(x_row, sum_error_w_batch)]
+
+            if self._validation_X:
+                sum_squared_error = 0
+                sum_error_w_batch = [0 for w in self.get_weights()]
+
+                for x_validation, y_validation in zip(self._validation_X, self._validation_y):
+                    y_valid_pred = self.predict(x_validation)
+
+                    error = y_validation - y_valid_pred
+                    sum_squared_error += (error**2)
+
+                    sum_error_w_batch = [last_delta + (self.get_eta()*error*x_i_validation)
+                                         for x_i_validation, last_delta in zip(x_validation, sum_error_w_batch)]
 
             mse = sum_squared_error/len(x_row)
             delta_w = [w/len(x_row) for w in sum_error_w_batch]
