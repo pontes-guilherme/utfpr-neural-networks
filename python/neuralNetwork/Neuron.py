@@ -87,16 +87,12 @@ class Neuron(object):
 
             if self._validation_X:
                 sum_squared_error = 0
-                sum_error_w_batch = [0 for w in self.get_weights()]
 
                 for x_validation, y_validation in zip(self._validation_X, self._validation_y):
                     y_valid_pred = self.predict(x_validation)
 
-                    error = y_validation - y_valid_pred
-                    sum_squared_error += (error**2)
-
-                    sum_error_w_batch = [last_delta + (self.get_eta()*error*x_i_validation)
-                                         for x_i_validation, last_delta in zip(x_validation, sum_error_w_batch)]
+                    error_validation = y_validation - y_valid_pred
+                    sum_squared_error += (error_validation**2)
 
             mse = sum_squared_error/len(x_row)
             delta_w = [w/len(x_row) for w in sum_error_w_batch]
