@@ -1,16 +1,10 @@
 from neuralNetwork.Adaline import Adaline
+from common.adaline_exercises_functions import pre_processing
 
-x = [
-    [0, 0],
-    [1, 0],
-    [0, 1],
-    [1, 1],
-]
+X, y = pre_processing()
 
-y_and = [0, 0, 0, 1]
-y_or = [0, 1, 1, 1]
+perceptron = Adaline([X], [y],
+                     uses_batch=False, error_threshold=0.0000000001)
 
-perceptron = Adaline([x, x], [y_and, y_or], labels=['AND', 'OR'],
-                     uses_batch=False, batch_error_threshold=0)
-
-perceptron.predict([1, 1])
+for x_row in X:
+    perceptron.predict(x_row)
