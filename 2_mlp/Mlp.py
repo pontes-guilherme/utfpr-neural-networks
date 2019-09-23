@@ -1,6 +1,7 @@
 import random
 import numpy as np
 
+
 class Neuron(object):
 
     __weights = []
@@ -67,6 +68,17 @@ class Neuron(object):
     def update_weights_batch(self, delta_w):
         self.weights = np.add(self.weights, delta_w)
 
+    def get_error_validation(self):
+        sum_squared_error = 0
+
+        for x_validation, y_validation in zip(self.validation_X, self.validation_y):
+            y_valid_pred = self.predict(x_validation)
+
+            error_validation = y_validation - y_valid_pred
+            sum_squared_error += (error_validation ** 2)
+
+        return sum_squared_error
+
     def print_weights(self):
         print("\n")
         print('#'*50)
@@ -95,8 +107,6 @@ class Neuron(object):
                 error = y_d - y_pred
                 sum_squared_error += (error ** 2)
 
-                # self.bias = self.bias + (error * self.eta)
-
                 if not self.uses_batch:
                     self.update_weights_sample(error, x_row)
                 else:
@@ -105,17 +115,9 @@ class Neuron(object):
                     )
 
             if self.validation_X:
-                sum_squared_error = 0
-
-                for x_validation, y_validation in zip(self.validation_X, self.validation_y):
-                    y_valid_pred = self.predict(x_validation)
-
-                    error_validation = y_validation - y_valid_pred
-                    sum_squared_error += (error_validation ** 2)
+                sum_squared_error = self.get_error_validation()
 
             mse = sum_squared_error/len(x_row)
-            delta_w = np.divide(sum_error_w_batch, len(x_row))
-
             print('Epoch #', epoch, " - mse: {:.10f}".format(mse))
 
             if self.should_stop(sum_squared_error,
@@ -124,6 +126,7 @@ class Neuron(object):
                 return
 
             if self.uses_batch:
+                delta_w = np.divide(sum_error_w_batch, len(x_row))
                 self.update_weights_batch(delta_w)
 
         self.print_weights()
@@ -131,6 +134,7 @@ class Neuron(object):
     def predict(self, x_row):
         if len(x_row) != len(self.weights):
             x_row = [1] + x_row
+
         prediction = np.dot(self.weights, x_row)
         return self.activate(prediction)
 
