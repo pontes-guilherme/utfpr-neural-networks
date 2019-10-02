@@ -1,0 +1,22 @@
+{
+  "name": "mlp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pontes-guilherme/utfpr-neural-networks.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/pontes-guilherme/utfpr-neural-networks/issues"
+  },
+  "homepage": "https://github.com/pontes-guilherme/utfpr-neural-networks#readme",
+  "dependencies": {
+    "typescript": "^3.6.3"
+  }
+}

@@ -2,27 +2,28 @@ import random
 import numpy as np
 
 
-class Neuron(object):
+class Sigmoid:
+    @staticmethod
+    def apply(p):
+        return 1 / (1 + np.exp(p))
 
-    __weights = []
+    @staticmethod
+    def derivative(value):
+        return value * (1 - value)
 
-    def __init__(self, eta=0.1, epochs=100, uses_batch=False,
-                 error_threshold=0.01, validation_X=None, validation_y=None):
-        self.__eta = eta
-        self.__epochs = epochs
-        self.__bias = 1
-        self.__uses_batch = uses_batch
-        self.__error_threshold = error_threshold
-        self.__validation_X = validation_X
-        self.__validation_y = validation_y
 
-    @property
-    def uses_batch(self):
-        return self.__uses_batch
+class Layer:
+    def __init__(self, inputs_size, qtd_neurons, activation_function=None,
+                 weights=None, layer_bias=None):
+        self.__weights = weights if weights is not None else np.random.rand(
+            inputs_size, qtd_neurons)
+        self.__layer_bias = layer_bias if layer_bias is not None else np.random.rand(
+            qtd_neurons)
+        self.__activation_function = activation_function
 
-    @property
-    def error_threshold(self):
-        return self.__error_threshold
+        self.last_activation = None
+        self.error = None
+        self.delta = None
 
     @property
     def weights(self):
@@ -33,114 +34,151 @@ class Neuron(object):
         self.__weights = weights
 
     @property
-    def epochs(self):
-        return self.__epochs
+    def layer_bias(self):
+        return self.__layer_bias
+
+    @layer_bias.setter
+    def layer_bias(self, layer_bias):
+        self.__layer_bias = layer_bias
+
+    @property
+    def activation_function(self):
+        return self.__activation_function
+
+    def activate(self, x_row):
+        layer_activation = np.dot(x_row, self.weights) + self.layer_bias
+        self.activation_history = self.exec_activation_function(
+            layer_activation)
+        self.last_activation = self.activation_history
+
+        return self.activation_history
+
+    def exec_activation_function(self, prediction):
+        """Executa a função de ativação em uma lista de 
+        valores preditos
+
+        Arguments:
+            prediction {list} -- Lista de predições
+
+        Returns:
+            list -- Lista de valores de ativação
+        """
+        if self.activation_function == 'sigmoid':
+            # print(Sigmoid.apply(prediction))
+            return Sigmoid.apply(prediction)
+
+        return prediction
+
+    def exec_function_derivative(self, prediction):
+        if self.activation_function == 'sigmoid':
+            return Sigmoid.derivative(prediction)
+
+        return prediction
+
+
+class NN:
+
+    __layers = []
+
+    def __init__(self, eta=0.01, epochs=1000):
+        self.__eta = eta
+        self.__epochs = epochs
+
+    @property
+    def layers(self):
+        return self.__layers
 
     @property
     def eta(self):
         return self.__eta
 
     @property
-    def bias(self):
-        return self.__bias
+    def epochs(self):
+        return self.__epochs
 
-    @bias.setter
-    def bias(self, bias):
-        self.__bias = bias
+    def new_layer(self, layer_to_add):
+        self.__layers.append(layer_to_add)
 
-    @property
-    def validation_X(self):
-        return self.__validation_X
+    def propagate(self, x_row):
+        for l in self.layers:
+            x_row = l.activate(x_row)
 
-    @property
-    def validation_y(self):
-        return self.__validation_y
+        return x_row
 
-    def init_weights(self, size):
-        self.weights = np.random.random(size)
-        #self.bias = 1
+    def backpropagate(self, x_row, y):
+        """Retropropaga os erros da última camada para as demais
 
-    def update_weights_sample(self, error, x_row):
-        self.weights = np.add(
-            self.weights, np.multiply(x_row, self.eta * error)
-        )
+        Arguments:
+            x_row {list} -- Representa um padrão de treinamento
+            y {float} -- Saída desejada
+        """
+        y_pred = self.propagate(x_row)
 
-    def update_weights_batch(self, delta_w):
-        self.weights = np.add(self.weights, delta_w)
+        layers_backwards = reversed(range(len(self.layers[:-1])))
 
-    def get_error_validation(self):
-        sum_squared_error = 0
+        last_layer = self.layers[-1]
+        last_layer.error = y - y_pred
+        last_layer.delta = last_layer.error * \
+            last_layer.exec_function_derivative(y_pred)
 
-        for x_validation, y_validation in zip(self.validation_X, self.validation_y):
-            y_valid_pred = self.predict(x_validation)
+        for lidx in layers_backwards:
+            layer = self.layers[lidx]
+            next_layer = self.layers[lidx + 1]
+            layer.error = np.dot(next_layer.weights, next_layer.delta)
+            layer.delta = layer.error * \
+                layer.exec_function_derivative(layer.last_activation)
 
-            error_validation = y_validation - y_valid_pred
-            sum_squared_error += (error_validation ** 2)
+        for lidx in range(len(self.layers)):
+            layer = self.layers[lidx]
+            # The input is either the previous layers output or X itself (for the first hidden layer)
+            input_to_use = np.atleast_2d(self.layers[lidx - 1].last_activation)
+            layer.weights += layer.delta * input_to_use.T * self.eta
 
-        return sum_squared_error
-
-    def print_weights(self):
-        print("\n")
-        print('#'*50)
-        print('list of weights - first one is the bias')
-        print(self.weights)
-        print('#'*50)
+        return last_layer.error
 
     def train(self, X, y):
-        print("\nStarting neuron training...")
+        """Treina a rede neural
 
-        X = np.array(X)
-
-        bias_column = np.ones((X.shape[0], 1))
-        X = np.hstack((bias_column, X))
-
-        n_lines, n_columns = X.shape
-
-        self.init_weights(n_columns)
+        Arguments:
+            X {list} -- Lista de padrões de treinamento
+            y {list} -- Lista de valores desejados, um para cada padrão
+        """
         for epoch in range(self.epochs):
             sum_squared_error = 0
-            sum_error_w_batch = np.zeros(n_columns)
 
-            for x_row, y_d in zip(X, y):
-                y_pred = self.predict(x_row)
+            for p in range(len(X)):
+                errors_last_layer = self.backpropagate(X[p], y[p])
 
-                error = y_d - y_pred
-                sum_squared_error += (error ** 2)
+                sum_squared_error += np.sum(np.abs(errors_last_layer)) ** 2
 
-                if not self.uses_batch:
-                    self.update_weights_sample(error, x_row)
-                else:
-                    sum_error_w_batch = np.add(
-                        sum_error_w_batch, np.multiply(x_row, self.eta * error)
-                    )
-
-            if self.validation_X:
-                sum_squared_error = self.get_error_validation()
-
-            mse = sum_squared_error/len(x_row)
-            print('Epoch #', epoch, " - mse: {:.10f}".format(mse))
-
-            if self.should_stop(sum_squared_error,
-                                threshold=self.error_threshold):
-                self.print_weights()
+            mse = sum_squared_error/len(X)
+            print('epoch #', epoch, ' - mse:', mse)
+            if mse == 0:
                 return
 
-            if self.uses_batch:
-                delta_w = np.divide(sum_error_w_batch, len(x_row))
-                self.update_weights_batch(delta_w)
-
-        self.print_weights()
-
     def predict(self, x_row):
-        if len(x_row) != len(self.weights):
-            x_row = [1] + x_row
+        """Efetua uma predição para um padrão de entrada
 
-        prediction = np.dot(self.weights, x_row)
-        return self.activate(prediction)
+        Arguments:
+            x_row {list} -- Padrão de entrada
 
-    def activate(self, prediction):
-        # return 1 if prediction > 0 else 0
-        return prediction
+        Returns:
+            [float] -- Valor predito pela rede
+        """
+        propagation = self.propagate(x_row)
 
-    def should_stop(self, error, threshold=0):
-        return error <= threshold
+        return np.argmax(propagation, axis=1)
+
+
+nn = NN(0.01, 10000)
+nn.new_layer(Layer(2, 3, 'sigmoid'))
+nn.new_layer(Layer(3, 3, 'sigmoid'))
+nn.new_layer(Layer(3, 2, 'sigmoid'))
+
+# Define dataset
+X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
+y = np.array([[0], [0], [0], [1]])
+
+# Train the neural network
+errors = nn.train(X, y)
+print(nn.predict(X))
