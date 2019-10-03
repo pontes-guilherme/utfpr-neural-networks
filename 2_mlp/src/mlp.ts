@@ -40,20 +40,37 @@ class MLP {
         return x_row;
     }
 
-    public backpropagate(x_row: Array<number>, y: Array<number>) {
+    public backpropagate(x_row: Array<number>, y: number) {
         let y_pred: Array<number> = this.propagate(x_row);
         const lastLayer: Layer = this.getLastLayer();
 
-        //TODO
+        //TODO como resolver quando há mais de um nn na última camada???
+        lastLayer.calculateNeuronsProps(x_row, y, y_pred);
+
+        for (let l = this.layers.length - 2; l >= 0; l++) {
+            let nextLayer: Layer = this.layers[l + 1];
+            let currentLayer: Layer = this.layers[l];
+
+            //TODO set current layer error  
+            currentLayer.calculateNeuronsErrors();
+
+
+            //TODO set current layer delta
+            //delta = error * derivada(ativacao(w))
+        }
+
+        //TODO update all neuron weights from all layers
 
     }
 
     public train(X: Array<Array<number>>, y: Array<number>): void {
+        for (let epoch = 0; epoch < this.epochs; epoch++) {
 
+        }
     }
 
     public predict(x_row: Array<number>): Array<number> {
-        return this.getLastLayer().getLayerActivation(x_row);
+        return this.propagate(x_row);
     }
 
 }
@@ -69,12 +86,10 @@ class Layer {
     constructor(
         n_inputs: number,
         n_neurons: number,
-        eta: number,
         activationFunction: IActivationFunction,
     ) {
         this.n_inputs = n_inputs;
         this.n_neurons = n_neurons;
-        this.eta = eta;
         this.activationFunction = activationFunction;
 
         this.neurons = this.initNeurons();
@@ -101,16 +116,50 @@ class Layer {
         return predictions;
     }
 
+    public calculateNeuronsProps(
+        x_row: Array<number>,
+        y_d: number,
+        y_pred: number
+    ) {
+        for (let i in this.neurons) {
+            let neuron: Neuron = this.neurons[i];
+
+            neuron.setError(neuron.calculateError(x_row, y_d));
+            neuron.setDelta(neuron.calculateDelta(y_pred));
+            neuron.setBias(neuron.calculateBias(neuron.getError()));
+        }
+    }
+
+    public calculateNeuronsErrors(x_row: Array<number>, y_d: number): void {
+        for (let i in this.neurons) {
+            let neuron: Neuron = this.neurons[i];
+            neuron.setError(neuron.calculateError(x_row, y_d));
+        }
+    }
+
+    public getSumNeuronsErrors(): number {
+        let totalError: number = 0;
+
+        for (let i in this.neurons) {
+            let neuron: Neuron = this.neurons[i];
+            totalError += neuron.getError();
+        }
+
+        return totalError;
+    }
+
 }
 
 class Neuron {
-    private bias: number;
-    private delta: number;
+
     private eta: number;
     private n_inputs: number;
     private activationFunction: IActivationFunction;
 
     private weights: number[];
+    private bias: number;
+    private error: number;
+    private delta: number;
 
     constructor(
         n_inputs: number,
@@ -120,6 +169,7 @@ class Neuron {
 
         this.bias = 1;
         this.delta = 0;
+        this.error = 0;
 
         this.n_inputs = n_inputs;
         this.eta = eta;
@@ -138,8 +188,45 @@ class Neuron {
         return arr;
     }
 
-    public setBias(error: number): void {
-        this.bias = this.bias * error * this.eta;
+    public getBias(): number {
+        return this.bias;
+    }
+
+    public setBias(bias: number): void {
+        this.bias = bias;
+    }
+
+    public getError(): number {
+        return this.error;
+    }
+
+    public setError(error: number): void {
+        this.error = error;
+    }
+
+    public getDelta(): number {
+        return this.delta;
+    }
+
+    public setDelta(delta: number): void {
+        this.delta = delta;
+    }
+
+    public getWeights(): Array<number> {
+        return this.weights;
+    }
+
+
+    public calculateBias(error: number): number {
+        return this.bias + error * this.eta;
+    }
+
+    public calculateError(x_row: Array<number>, y_d: number): number {
+        return y_d - this.predict(x_row);
+    }
+
+    public calculateDelta(y_pred: number): number {
+        return this.error * this.activationFunction.derivate(y_pred);
     }
 
     public updateWeights(x_row: Array<number>, error: number): void {
@@ -152,7 +239,7 @@ class Neuron {
         let prediction: number = 0;
 
         for (let i in x_row) {
-            prediction += x_row[i] * this.weights[i] * this.eta;
+            prediction += x_row[i] * this.weights[i] * this.eta + this.bias;
         }
 
         //return prediction;
@@ -163,4 +250,21 @@ class Neuron {
 
 }
 
-let layer = new Layer(2, 3, 0.01, new Sigmoid);
+const layer1 = new Layer(2, 3, new Sigmoid);
+const layer2 = new Layer(3, 3, new Sigmoid);
+const layer3 = new Layer(3, 1, new Sigmoid);
+
+const mlp = new MLP([layer1, layer2, layer3], 0.01, 10000);
+
+const X = [
+    [0, 0],
+    [0, 1],
+    [1, 0],
+    [1, 1],
+];
+
+const y = [0, 0, 0, 1];
+
+
+mlp.train(X, y);
+console.log(mlp.predict([1, 1]));
