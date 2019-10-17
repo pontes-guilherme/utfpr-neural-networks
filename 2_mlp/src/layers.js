@@ -43,6 +43,7 @@ var MLP = /** @class */ (function () {
         var _x_row = x_row;
         for (var i in this.layers) {
             _x_row = this.layers[i].calculateLayerActivation(_x_row);
+            this.layers[i].setActivations(_x_row);
         }
         return _x_row;
     };
@@ -59,7 +60,7 @@ var MLP = /** @class */ (function () {
                     var y_pred = this.propagate(x_row);
                     var y_predicted = y_pred[n];
                     //calcula erro do neurônio
-                    var error = lastLayer.calculateNeuronError(n, x_row, y_desired);
+                    var error = y_desired - y_predicted;
                     lastLayer.setNeuronError(n, error);
                     //calcula delta do neurônio
                     var delta = lastLayer.calculateNeuronDelta(n, y_predicted);
@@ -68,6 +69,8 @@ var MLP = /** @class */ (function () {
                     var bias = lastLayer.calculateNeuronBias(n, error);
                     lastLayer.setNeuronBias(n, bias);
                 }
+                //TODO setar delta_weight baseado na saída da última camadas
+                //const delta_weight = (this.eta * currentLayer.getNeuronError(n) * x_i);
             }
             for (var l = this.layers.length - 2; l >= 0; l--) {
                 var nextLayer = this.layers[l + 1];
@@ -78,11 +81,11 @@ var MLP = /** @class */ (function () {
                     for (var p = 0; p < X.length; p++) {
                         var x_row = X[p];
                         var error = 0;
-                        for (var n_next = 0; n_next < nextLayer.getNNeurons(); n_next++) {
-                            var delta_1 = nextLayer.getNeuronDelta(n_next);
-                            for (var w_next = 0; w_next < nextLayer.getNeuronWeights(n_next).length; w_next++) {
-                                var w = nextLayer.getNeuronWeights(n_next)[w_next];
-                                error += (delta_1 * w);
+                        for (var n_next_idx = 0; n_next_idx < nextLayer.getNNeurons(); n_next_idx++) {
+                            var delta_1 = nextLayer.getNeuronDelta(n_next_idx);
+                            for (var w_next_idx = 0; w_next_idx < nextLayer.getNeuronWeights(n_next_idx).length; w_next_idx++) {
+                                var w_next = nextLayer.getNeuronWeights(n_next_idx)[w_next_idx];
+                                error += (delta_1 * w_next);
                             }
                         }
                         currentLayer.setNeuronError(n, error);
@@ -96,9 +99,15 @@ var MLP = /** @class */ (function () {
                     }
                 }
             }
+            //TODO tornar x_i como sendo a saída da camada anterior
+            //TODO guardar delta_w antes disso, para atualizar no final
             //update all neuron weights from all layers
-            for (var l = this.layers.length - 1; l >= 0; l--) {
+            for (var l = 0; l < this.layers.length; l++) {
                 var currentLayer = this.layers[l];
+                // let X_considered: Array<number> ;
+                // if (l == 0) {
+                //     X_considered = X;
+                // }
                 for (var n = 0; n < currentLayer.getNNeurons(); n++) {
                     var neuronWeights = currentLayer.getNeuronWeights(n);
                     for (var p = 0; p < X.length; p++) {
@@ -106,8 +115,8 @@ var MLP = /** @class */ (function () {
                         for (var i = 0; i < x_row.length; i++) {
                             var x_i = x_row[i];
                             var currentWeight = neuronWeights[i];
-                            neuronWeights[i] = currentWeight +
-                                (this.eta * currentLayer.getNeuronError(n) * currentWeight * x_i);
+                            neuronWeights[i] = currentWeight -
+                                (this.eta * currentLayer.getNeuronError(n) * x_i);
                         }
                     }
                     currentLayer.setNeuronWeights(n, neuronWeights);
@@ -126,6 +135,8 @@ var Layer = /** @class */ (function () {
         this.biases = new Array();
         this.errors = new Array();
         this.deltas = new Array();
+        this.activations = new Array();
+        this.delta_weights = new Array();
         this.n_inputs = n_inputs;
         this.n_neurons = n_neurons;
         this.activationFunction = activationFunction;
@@ -134,11 +145,14 @@ var Layer = /** @class */ (function () {
     }
     Layer.prototype.initNeurons = function () {
         this.weights = new Array();
+        this.delta_weights = new Array();
         this.errors = new Array();
         this.biases = new Array();
         this.deltas = new Array();
+        this.activations = new Array();
         for (var neuron = 0; neuron < this.n_neurons; neuron++) {
             this.weights[neuron] = new Array();
+            this.delta_weights[neuron] = new Array();
             for (var input = 0; input < this.n_inputs; input++) {
                 this.weights[neuron].push(Math.random());
             }
@@ -171,14 +185,26 @@ var Layer = /** @class */ (function () {
         }
         return this.deltas[neuron_idx];
     };
+    Layer.prototype.getNeuronDeltaWeights = function (neuron_idx) {
+        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
+            throw new Exception('Neuron index out of bounds');
+        }
+        return this.delta_weights[neuron_idx];
+    };
     Layer.prototype.getNeuronBias = function (neuron_idx) {
         if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
             throw new Exception('Neuron index out of bounds');
         }
         return this.biases[neuron_idx];
     };
+    Layer.prototype.getActivations = function () {
+        return this.activations;
+    };
     Layer.prototype.setEta = function (eta) {
         this.eta = eta;
+    };
+    Layer.prototype.setActivations = function (activations) {
+        this.activations = activations;
     };
     Layer.prototype.setNeuronError = function (neuron_idx, value) {
         if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
@@ -203,6 +229,12 @@ var Layer = /** @class */ (function () {
             throw new Exception('Neuron index out of bounds');
         }
         this.weights[neuron_idx] = weights;
+    };
+    Layer.prototype.setNeuronDeltaWeights = function (neuron_idx, weights) {
+        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
+            throw new Exception('Neuron index out of bounds');
+        }
+        this.delta_weights[neuron_idx] = weights;
     };
     Layer.prototype.calculateLayerActivation = function (x_row) {
         var activations = new Array();

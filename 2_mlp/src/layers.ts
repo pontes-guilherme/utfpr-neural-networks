@@ -69,6 +69,7 @@ class MLP {
 
         for (let i in this.layers) {
             _x_row = this.layers[i].calculateLayerActivation(_x_row);
+            this.layers[i].setActivations(_x_row);
         }
 
         return _x_row;
@@ -95,7 +96,7 @@ class MLP {
 
 
                     //calcula erro do neurônio
-                    const error: number = lastLayer.calculateNeuronError(n, x_row, y_desired);
+                    const error: number = y_desired - y_predicted;
                     lastLayer.setNeuronError(n, error);
 
                     //calcula delta do neurônio
@@ -106,6 +107,9 @@ class MLP {
                     const bias: number = lastLayer.calculateNeuronBias(n, error);
                     lastLayer.setNeuronBias(n, bias);
                 }
+
+                //TODO setar delta_weight baseado na saída da última camadas
+                //const delta_weight = (this.eta * currentLayer.getNeuronError(n) * x_i);
 
             }
 
@@ -122,12 +126,12 @@ class MLP {
 
                         let error = 0;
 
-                        for (let n_next = 0; n_next < nextLayer.getNNeurons(); n_next++) {
-                            let delta = nextLayer.getNeuronDelta(n_next);
+                        for (let n_next_idx = 0; n_next_idx < nextLayer.getNNeurons(); n_next_idx++) {
+                            let delta = nextLayer.getNeuronDelta(n_next_idx);
 
-                            for (let w_next = 0; w_next < nextLayer.getNeuronWeights(n_next).length; w_next++) {
-                                const w = nextLayer.getNeuronWeights(n_next)[w_next];
-                                error += (delta * w);
+                            for (let w_next_idx = 0; w_next_idx < nextLayer.getNeuronWeights(n_next_idx).length; w_next_idx++) {
+                                const w_next = nextLayer.getNeuronWeights(n_next_idx)[w_next_idx];
+                                error += (delta * w_next);
                             }
                         }
 
@@ -146,9 +150,17 @@ class MLP {
                 }
             }
 
+            //TODO tornar x_i como sendo a saída da camada anterior
+            //TODO guardar delta_w antes disso, para atualizar no final
             //update all neuron weights from all layers
-            for (let l = this.layers.length - 1; l >= 0; l--) {
-                let currentLayer: Layer = this.layers[l];
+            for (let l = 0; l < this.layers.length; l++) {
+                let currentLayer: Layer = this.layers[l]; 
+
+                // let X_considered: Array<number> ;
+
+                // if (l == 0) {
+                //     X_considered = X;
+                // }
 
                 for (let n = 0; n < currentLayer.getNNeurons(); n++) {
                     let neuronWeights: Array<number> = currentLayer.getNeuronWeights(n);
@@ -160,8 +172,8 @@ class MLP {
                             const x_i: number = x_row[i];
                             const currentWeight: number = neuronWeights[i];
 
-                            neuronWeights[i] = currentWeight +
-                                (this.eta * currentLayer.getNeuronError(n) * currentWeight * x_i);
+                            neuronWeights[i] = currentWeight -
+                                (this.eta * currentLayer.getNeuronError(n) * x_i);
                         }
                     }
 
@@ -188,6 +200,8 @@ class Layer {
     private biases: Array<number> = new Array();
     private errors: Array<number> = new Array();
     private deltas: Array<number> = new Array();
+    private activations: Array<number> = new Array();
+    private delta_weights: Array<Array<number>> = new Array();
 
     constructor(
         n_inputs: number,
@@ -204,12 +218,15 @@ class Layer {
 
     private initNeurons(): void {
         this.weights = new Array();
+        this.delta_weights = new Array();
         this.errors = new Array();
         this.biases = new Array();
         this.deltas = new Array();
+        this.activations = new Array();
 
         for (let neuron = 0; neuron < this.n_neurons; neuron++) {
             this.weights[neuron] = new Array();
+            this.delta_weights[neuron] = new Array();
 
             for (let input = 0; input < this.n_inputs; input++) {
                 this.weights[neuron].push(Math.random());
@@ -254,6 +271,14 @@ class Layer {
         return this.deltas[neuron_idx];
     }
 
+    public getNeuronDeltaWeights(neuron_idx: number): Array<number> {
+        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
+            throw new Exception('Neuron index out of bounds');
+        }
+
+        return this.delta_weights[neuron_idx];
+    }
+
     public getNeuronBias(neuron_idx: number): number {
         if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
             throw new Exception('Neuron index out of bounds');
@@ -262,9 +287,17 @@ class Layer {
         return this.biases[neuron_idx];
     }
 
+    public getActivations(): Array<number> {
+        return this.activations;
+    }
+
 
     public setEta(eta: number): void {
         this.eta = eta;
+    }
+
+    public setActivations(activations: Array<number>): void {
+        this.activations = activations;
     }
 
     public setNeuronError(neuron_idx: number, value: number): void {
@@ -297,6 +330,14 @@ class Layer {
         }
 
         this.weights[neuron_idx] = weights;
+    }
+
+    public setNeuronDeltaWeights(neuron_idx: number, weights: Array<number>): void {
+        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
+            throw new Exception('Neuron index out of bounds');
+        }
+
+        this.delta_weights[neuron_idx] = weights;
     }
 
     public calculateLayerActivation(x_row: Array<number>): Array<number> {
