@@ -79,21 +79,18 @@ class MLP {
         for (let epoch = 0; epoch < this.epochs; epoch++) {
 
             const lastLayer: Layer = this.getLastLayer();
+            const penultimateLayer: Layer = this.layers[this.layers.length - 2];
 
-            //iterar por cada neurônio da última camada
-            for (let n = 0; n < lastLayer.getNNeurons(); n++) {
+            //para cada padrão de treinamento
+            for (let p = 0; p < X.length; p++) {
+                const x_row: Array<number> = X[p];
+                const y_pred: Array<number> = this.propagate(x_row);
 
-                const y_desired_neuron: Array<number> = y[n];
-
-                //para cada padrão de treinamento
-                for (let p = 0; p < X.length; p++) {
-                    const x_row: Array<number> = X[p];
+                //iterar por cada neurônio da última camada
+                for (let n = 0; n < lastLayer.getNNeurons(); n++) {
+                    const y_desired_neuron: Array<number> = y[n];
                     const y_desired: number = y_desired_neuron[p];
-
-                    const y_pred: Array<number> = this.propagate(x_row);
-
                     const y_predicted: number = y_pred[n];
-
 
                     //calcula erro do neurônio
                     const error: number = y_desired - y_predicted;
@@ -106,24 +103,34 @@ class MLP {
                     //calcula bias do neurônio
                     const bias: number = lastLayer.calculateNeuronBias(n, error);
                     lastLayer.setNeuronBias(n, bias);
+
+                    //setar delta_weight baseado na saída da última camada
+                    let delta_weight = [];
+                    const penultimate_layer_x_row: Array<number> = penultimateLayer.getActivations();
+                    for (let j in penultimate_layer_x_row) {
+                        let x_from_previous_layer: number = penultimate_layer_x_row[j];
+                        delta_weight.push((this.eta * lastLayer.getNeuronError(n) * x_from_previous_layer));
+                    }
+
+                    lastLayer.setNeuronDeltaWeights(n, delta_weight);
                 }
 
-                //TODO setar delta_weight baseado na saída da última camadas
-                //const delta_weight = (this.eta * currentLayer.getNeuronError(n) * x_i);
 
-            }
+                for (let l = this.layers.length - 2; l >= 0; l--) {
+                    let nextLayer: Layer = this.layers[l + 1];
+                    let currentLayer: Layer = this.layers[l];
 
-            for (let l = this.layers.length - 2; l >= 0; l--) {
-                let nextLayer: Layer = this.layers[l + 1];
-                let currentLayer: Layer = this.layers[l];
+                    let x_row_considered: Array<number>;
 
-                //iterar por cada neurônio da camada
-                for (let n = 0; n < currentLayer.getNNeurons(); n++) {
+                    if (l > 0) {
+                        let previousLayer: Layer = this.layers[l - 1];
+                        x_row_considered = previousLayer.getActivations();
+                    } else {
+                        x_row_considered = x_row;
+                    }
 
-                    //para cada padrão de treinamento
-                    for (let p = 0; p < X.length; p++) {
-                        const x_row: Array<number> = X[p];
-
+                    //iterar por cada neurônio da camada
+                    for (let n = 0; n < currentLayer.getNNeurons(); n++) {
                         let error = 0;
 
                         for (let n_next_idx = 0; n_next_idx < nextLayer.getNNeurons(); n_next_idx++) {
@@ -145,35 +152,33 @@ class MLP {
                         //calcula bias do neurônio
                         let bias = currentLayer.calculateNeuronBias(n, error);
                         currentLayer.setNeuronBias(n, bias);
-                    }
 
+                        //setar delta_weight baseado na saída da última camada
+                        let delta_weight = [];
+                        for (let j in x_row_considered) {
+                            let x_from_previous_layer: number = x_row_considered[j];
+                            delta_weight.push((this.eta * currentLayer.getNeuronError(n) * x_from_previous_layer));
+                        }
+
+                        currentLayer.setNeuronDeltaWeights(n, delta_weight);
+                    }
                 }
+
             }
 
-            //TODO tornar x_i como sendo a saída da camada anterior
-            //TODO guardar delta_w antes disso, para atualizar no final
             //update all neuron weights from all layers
             for (let l = 0; l < this.layers.length; l++) {
-                let currentLayer: Layer = this.layers[l]; 
-
-                // let X_considered: Array<number> ;
-
-                // if (l == 0) {
-                //     X_considered = X;
-                // }
+                let currentLayer: Layer = this.layers[l];
 
                 for (let n = 0; n < currentLayer.getNNeurons(); n++) {
                     let neuronWeights: Array<number> = currentLayer.getNeuronWeights(n);
+                    const neuronDeltaWeights: Array<number> = currentLayer.getNeuronDeltaWeights(n);
 
                     for (let p = 0; p < X.length; p++) {
                         const x_row: Array<number> = X[p];
 
                         for (let i = 0; i < x_row.length; i++) {
-                            const x_i: number = x_row[i];
-                            const currentWeight: number = neuronWeights[i];
-
-                            neuronWeights[i] = currentWeight -
-                                (this.eta * currentLayer.getNeuronError(n) * x_i);
+                            neuronWeights[i] += neuronDeltaWeights[i];
                         }
                     }
 
