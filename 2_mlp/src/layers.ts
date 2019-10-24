@@ -1,18 +1,29 @@
-interface Throwable {
-    getMessage(): String;
+
+const NORM_START = 0.1;
+const NORM_END = 0.9;
+
+function norm(value, min, max, ra, rb) {
+    return (((ra - rb) * (value - min)) / (max - min)) + rb;
 }
 
-class Exception implements Throwable {
-    private message: String;
+var flatten = function flatten(list) {
+    return list.reduce(function (a, b) {
+        return a.concat(Array.isArray(b) ? flatten(b) : b);
+    }, []);
+};
 
-    constructor(message: String) {
-        this.message = message
-    }
-
-    public getMessage(): String {
-        return this.message;
-    }
+var min = (l: Array<number>) => {
+    return l.reduce((acc, item) => {
+        return item < acc ? item : acc;
+    }, Infinity)
 }
+
+var max = (l: Array<number>) => {
+    return l.reduce((acc, item) => {
+        return item > acc ? item : acc;
+    }, -Infinity)
+}
+
 
 interface IActivationFunction {
     apply(value: number): number;
@@ -23,19 +34,11 @@ class Sigmoid implements IActivationFunction {
     public apply(value: number): number {
         const result: number = (1 / (1 + value));
 
-        if (isNaN(result)) {
-            throw new Exception('Resulted in NaN');
-        }
-
         return result;
     }
 
     public derivate(value: number): number {
         const result: number = value * (1 - value);
-
-        if (isNaN(result)) {
-            throw new Exception('Resulted in NaN');
-        }
 
         return result;
     }
@@ -76,14 +79,40 @@ class MLP {
     }
 
     public train(X: Array<Array<number>>, y: Array<Array<number>>): void {
+        /* NORMALIZAÇÂO */
+        const X_NORM: Array<Array<number>> = Array();
+
+        const flat: Array<number> = flatten(X);
+        const min_val = min(flat);
+        const max_val = max(flat);
+
+        for (let p = 0; p < X.length; p++) {
+            const x_row: Array<number> = X[p];
+
+            X_NORM[p] = Array();
+
+            for (let i in x_row) {
+                const x: number = x_row[i];
+
+                X_NORM[p][i] = norm(x, min_val, max_val, NORM_START, NORM_END);
+            }
+        }
+
+
         for (let epoch = 0; epoch < this.epochs; epoch++) {
+
+            //limpa os delta weights no início de cada época
+            for (let l = this.layers.length - 1; l >= 0; l--) {
+                let currentLayer: Layer = this.layers[l];
+                currentLayer.clearDeltaWeights();
+            }
 
             const lastLayer: Layer = this.getLastLayer();
             const penultimateLayer: Layer = this.layers[this.layers.length - 2];
 
             //para cada padrão de treinamento
-            for (let p = 0; p < X.length; p++) {
-                const x_row: Array<number> = X[p];
+            for (let p = 0; p < X_NORM.length; p++) {
+                const x_row: Array<number> = X_NORM[p];
                 const y_pred: Array<number> = this.propagate(x_row);
 
                 //iterar por cada neurônio da última camada
@@ -104,12 +133,18 @@ class MLP {
                     const bias: number = lastLayer.calculateNeuronBias(n, error);
                     lastLayer.setNeuronBias(n, bias);
 
+
+                    const neuron_delta_weights: Array<number> = lastLayer.getNeuronDeltaWeights(n);
                     //setar delta_weight baseado na saída da última camada
                     let delta_weight = [];
                     const penultimate_layer_x_row: Array<number> = penultimateLayer.getActivations();
                     for (let j in penultimate_layer_x_row) {
                         let x_from_previous_layer: number = penultimate_layer_x_row[j];
-                        delta_weight.push((this.eta * lastLayer.getNeuronError(n) * x_from_previous_layer));
+
+                        const previous_delta = neuron_delta_weights.length ? neuron_delta_weights[j] : 0;
+
+                        const newDeltaWeight = (previous_delta + (this.eta * lastLayer.getNeuronError(n) * x_from_previous_layer));
+                        delta_weight.push(newDeltaWeight);
                     }
 
                     lastLayer.setNeuronDeltaWeights(n, delta_weight);
@@ -131,7 +166,7 @@ class MLP {
 
                     //iterar por cada neurônio da camada
                     for (let n = 0; n < currentLayer.getNNeurons(); n++) {
-                        let error = 0;
+                        let error: number = 0;
 
                         for (let n_next_idx = 0; n_next_idx < nextLayer.getNNeurons(); n_next_idx++) {
                             let delta = nextLayer.getNeuronDelta(n_next_idx);
@@ -153,11 +188,17 @@ class MLP {
                         let bias = currentLayer.calculateNeuronBias(n, error);
                         currentLayer.setNeuronBias(n, bias);
 
+                        const neuron_delta_weights: Array<number> = currentLayer.getNeuronDeltaWeights(n);
                         //setar delta_weight baseado na saída da última camada
                         let delta_weight = [];
                         for (let j in x_row_considered) {
                             let x_from_previous_layer: number = x_row_considered[j];
-                            delta_weight.push((this.eta * currentLayer.getNeuronError(n) * x_from_previous_layer));
+
+                            const previous_delta = neuron_delta_weights.length ? neuron_delta_weights[j] : 0;
+
+                            const newDeltaWeight = (previous_delta + (this.eta * currentLayer.getNeuronError(n) * x_from_previous_layer));
+                            delta_weight.push(newDeltaWeight);
+
                         }
 
                         currentLayer.setNeuronDeltaWeights(n, delta_weight);
@@ -174,12 +215,8 @@ class MLP {
                     let neuronWeights: Array<number> = currentLayer.getNeuronWeights(n);
                     const neuronDeltaWeights: Array<number> = currentLayer.getNeuronDeltaWeights(n);
 
-                    for (let p = 0; p < X.length; p++) {
-                        const x_row: Array<number> = X[p];
-
-                        for (let i = 0; i < x_row.length; i++) {
-                            neuronWeights[i] += neuronDeltaWeights[i];
-                        }
+                    for (let i in neuronDeltaWeights) {
+                        neuronWeights[i] += neuronDeltaWeights[i];
                     }
 
                     currentLayer.setNeuronWeights(n, neuronWeights);
@@ -234,7 +271,7 @@ class Layer {
             this.delta_weights[neuron] = new Array();
 
             for (let input = 0; input < this.n_inputs; input++) {
-                this.weights[neuron].push(Math.random());
+                this.weights[neuron].push(Math.random() * 2 - 1);
             }
 
             this.biases[neuron] = 1;
@@ -253,42 +290,22 @@ class Layer {
     }
 
     public getNeuronWeights(neuron_idx: number): Array<number> {
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
         return this.weights[neuron_idx];
     }
 
     public getNeuronError(neuron_idx: number): number {
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
         return this.errors[neuron_idx];
     }
 
     public getNeuronDelta(neuron_idx: number): number {
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
         return this.deltas[neuron_idx];
     }
 
     public getNeuronDeltaWeights(neuron_idx: number): Array<number> {
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
         return this.delta_weights[neuron_idx];
     }
 
     public getNeuronBias(neuron_idx: number): number {
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
         return this.biases[neuron_idx];
     }
 
@@ -306,43 +323,31 @@ class Layer {
     }
 
     public setNeuronError(neuron_idx: number, value: number): void {
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
         this.errors[neuron_idx] = value;
     }
 
     public setNeuronDelta(neuron_idx: number, value: number): void {
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
         this.deltas[neuron_idx] = value;
     }
 
     public setNeuronBias(neuron_idx: number, value: number): void {
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
         this.biases[neuron_idx] = value;
     }
 
     public setNeuronWeights(neuron_idx: number, weights: Array<number>): void {
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
         this.weights[neuron_idx] = weights;
     }
 
     public setNeuronDeltaWeights(neuron_idx: number, weights: Array<number>): void {
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
         this.delta_weights[neuron_idx] = weights;
+    }
+
+    public clearDeltaWeights() {
+        this.delta_weights = new Array();
+
+        for (let neuron = 0; neuron < this.n_neurons; neuron++) {
+            this.delta_weights[neuron] = new Array();
+        }
     }
 
     public calculateLayerActivation(x_row: Array<number>): Array<number> {
@@ -358,22 +363,15 @@ class Layer {
 
 
     public calculateNeuronActivation(neuron_idx: number, x_row: Array<number>): number {
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
         let prediction: number = 0;
 
         for (let i in x_row) {
-            prediction += ((x_row[i] * this.weights[neuron_idx][i] * this.eta)
-                + this.biases[neuron_idx]);
+            prediction += (x_row[i] * this.weights[neuron_idx][i] * this.eta);
         }
+
+        prediction += this.biases[neuron_idx];
 
         let activation = this.activationFunction.apply(prediction);
-
-        if (isNaN(activation)) {
-            throw new Exception('Resulted in NaN');
-        }
 
         return activation;
     }
@@ -381,57 +379,13 @@ class Layer {
     public calculateNeuronBias(neuron_idx: number, error: number): number {
         const bias = this.biases[neuron_idx] + error * this.eta;
 
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
-        if (isNaN(bias)) {
-            console.log(this.n_neurons);
-            console.log(neuron_idx, this.biases[neuron_idx], error, this.eta);
-            throw new Exception('Resulted in NaN');
-        }
-
         return bias;
-    }
-
-    public calculateNeuronError(neuron_idx: number, x_row: Array<number>, y_d: number): number {
-        const error: number = y_d - this.calculateNeuronActivation(neuron_idx, x_row);
-
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
-        if (isNaN(error)) {
-            throw new Exception('Resulted in NaN');
-        }
-
-        return error;
     }
 
     public calculateNeuronDelta(neuron_idx: number, y_pred: number): number {
         const delta: number = this.errors[neuron_idx] * this.activationFunction.derivate(y_pred);
 
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
-        if (isNaN(delta)) {
-            throw new Exception('Resulted in NaN');
-        }
-
         return delta;
-    }
-
-    public updateNeuronWeights(neuron_idx: number, x_row: Array<number>, error: number): void {
-
-        if (neuron_idx > this.getNNeurons() - 1 && neuron_idx < 0) {
-            throw new Exception('Neuron index out of bounds');
-        }
-
-        for (let i = 0; i < this.n_inputs; i++) {
-            this.weights[neuron_idx][i] = this.weights[neuron_idx][i]
-                + (error * x_row[i] * this.eta);
-        }
     }
 
 }
@@ -441,7 +395,7 @@ const layer1 = new Layer(2, 3, new Sigmoid);
 const layer2 = new Layer(3, 3, new Sigmoid);
 const layer3 = new Layer(3, 2, new Sigmoid);
 
-const mlp = new MLP([layer1, layer2, layer3], 0.01, 10);
+const mlp = new MLP([layer1, layer2, layer3], 0.01, 1000);
 
 const X = [
     [0, 0],
