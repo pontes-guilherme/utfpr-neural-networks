@@ -1,28 +1,9 @@
-var NORM_START = 0.1;
-var NORM_END = 0.9;
-function norm(value, min, max, ra, rb) {
-    return (((ra - rb) * (value - min)) / (max - min)) + rb;
-}
-var flatten = function flatten(list) {
-    return list.reduce(function (a, b) {
-        return a.concat(Array.isArray(b) ? flatten(b) : b);
-    }, []);
-};
-var min = function (l) {
-    return l.reduce(function (acc, item) {
-        return item < acc ? item : acc;
-    }, Infinity);
-};
-var max = function (l) {
-    return l.reduce(function (acc, item) {
-        return item > acc ? item : acc;
-    }, -Infinity);
-};
+"use strict";
 var Sigmoid = /** @class */ (function () {
     function Sigmoid() {
     }
     Sigmoid.prototype.apply = function (value) {
-        var result = (1 / (1 + value));
+        var result = (1 / (1 + Math.pow(Math.E, -value)));
         return result;
     };
     Sigmoid.prototype.derivate = function (value) {
@@ -52,20 +33,10 @@ var MLP = /** @class */ (function () {
         return _x_row;
     };
     MLP.prototype.train = function (X, y) {
-        /* NORMALIZAÇÂO */
-        var X_NORM = Array();
-        var flat = flatten(X);
-        var min_val = min(flat);
-        var max_val = max(flat);
-        for (var p = 0; p < X.length; p++) {
-            var x_row = X[p];
-            X_NORM[p] = Array();
-            for (var i in x_row) {
-                var x = x_row[i];
-                X_NORM[p][i] = norm(x, min_val, max_val, NORM_START, NORM_END);
-            }
-        }
+        var X_NORM = X;
+        var p_size = X_NORM.length;
         for (var epoch = 0; epoch < this.epochs; epoch++) {
+            var sum_of_errors = 0;
             //limpa os delta weights no início de cada época
             for (var l = this.layers.length - 1; l >= 0; l--) {
                 var currentLayer = this.layers[l];
@@ -84,6 +55,7 @@ var MLP = /** @class */ (function () {
                     var y_predicted = y_pred[n];
                     //calcula erro do neurônio
                     var error = y_desired - y_predicted;
+                    sum_of_errors += (Math.pow(error, 2));
                     lastLayer.setNeuronError(n, error);
                     //calcula delta do neurônio
                     var delta = lastLayer.calculateNeuronDelta(n, y_predicted);
@@ -98,7 +70,7 @@ var MLP = /** @class */ (function () {
                     for (var j in penultimate_layer_x_row) {
                         var x_from_previous_layer = penultimate_layer_x_row[j];
                         var previous_delta = neuron_delta_weights.length ? neuron_delta_weights[j] : 0;
-                        var newDeltaWeight = (previous_delta + (this.eta * lastLayer.getNeuronError(n) * x_from_previous_layer));
+                        var newDeltaWeight = (previous_delta + (this.eta * delta * x_from_previous_layer));
                         delta_weight.push(newDeltaWeight);
                     }
                     lastLayer.setNeuronDeltaWeights(n, delta_weight);
@@ -152,11 +124,12 @@ var MLP = /** @class */ (function () {
                     var neuronWeights = currentLayer.getNeuronWeights(n);
                     var neuronDeltaWeights = currentLayer.getNeuronDeltaWeights(n);
                     for (var i in neuronDeltaWeights) {
-                        neuronWeights[i] += neuronDeltaWeights[i];
+                        neuronWeights[i] += (neuronDeltaWeights[i] / p_size);
                     }
                     currentLayer.setNeuronWeights(n, neuronWeights);
                 }
             }
+            console.log("epoch " + epoch + ": sum error = " + sum_of_errors / p_size);
         }
     };
     MLP.prototype.predict = function (x_row) {
@@ -238,8 +211,8 @@ var Layer = /** @class */ (function () {
     Layer.prototype.setNeuronWeights = function (neuron_idx, weights) {
         this.weights[neuron_idx] = weights;
     };
-    Layer.prototype.setNeuronDeltaWeights = function (neuron_idx, weights) {
-        this.delta_weights[neuron_idx] = weights;
+    Layer.prototype.setNeuronDeltaWeights = function (neuron_idx, deltas) {
+        this.delta_weights[neuron_idx] = deltas;
     };
     Layer.prototype.clearDeltaWeights = function () {
         this.delta_weights = new Array();
@@ -265,7 +238,7 @@ var Layer = /** @class */ (function () {
         return activation;
     };
     Layer.prototype.calculateNeuronBias = function (neuron_idx, error) {
-        var bias = this.biases[neuron_idx] + error * this.eta;
+        var bias = this.biases[neuron_idx] + (error * this.eta);
         return bias;
     };
     Layer.prototype.calculateNeuronDelta = function (neuron_idx, y_pred) {
@@ -275,16 +248,15 @@ var Layer = /** @class */ (function () {
     return Layer;
 }());
 var layer1 = new Layer(2, 3, new Sigmoid);
-var layer2 = new Layer(3, 3, new Sigmoid);
-var layer3 = new Layer(3, 2, new Sigmoid);
-var mlp = new MLP([layer1, layer2, layer3], 0.01, 1000);
+var layer2 = new Layer(3, 1, new Sigmoid);
+var mlp = new MLP([layer1, layer2], 0.01, 100000);
 var X = [
     [0, 0],
     [0, 1],
     [1, 0],
     [1, 1],
 ];
-var y = [[0, 0, 0, 1], [0, 1, 1, 1]];
+var y = [[0, 1, 1, 0]];
 mlp.train(X, y);
 console.log(mlp.predict([0, 0]));
 console.log(mlp.predict([0, 1]));
