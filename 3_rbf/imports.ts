@@ -1,15 +1,15 @@
 export namespace Constants {
-    export const K: Number = 3;
-    export const ITERATIONS: Number = 1000;
+    export const K: number = 3;
+    export const ITERATIONS: number = 1000;
 }
 
 export namespace Interfaces {
     export interface IClustering {
-        cluster(data: Number[][]): Object[];
-        getNumberOfClusters(): Number;
+        cluster(data: number[][]): Object[];
+        getNumberOfClusters(): number;
     }
 
-    export interface ICentroid {
-        center: Number[];
-    }
+    // export interface ICentroid {
+    //     center: Number[];
+    // }
 }
