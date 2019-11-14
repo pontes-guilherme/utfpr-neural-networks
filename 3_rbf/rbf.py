@@ -1,134 +1,108 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn import datasets
+from clustering import kmeans
+from functions import radial_basis_function
 
-def kmeans(X, k):
-    """Performs k-means clustering for 1D input
-    
-    Arguments:
-        X {ndarray} -- A Mx1 array of inputs
-        k {int} -- Number of clusters
-    
-    Returns:
-        ndarray -- A kx1 array of final cluster centers
-    """
- 
-    # randomly select initial clusters from input data
-    clusters = np.random.choice(np.squeeze(X), size=k)
-    prevClusters = clusters.copy()
-    stds = np.zeros(k)
-    converged = False
- 
-    while not converged:
-        """
-        compute distances for each cluster center to each point 
-        where (distances[i, j] represents the distance between the ith point and jth cluster)
-        """
-        distances = np.squeeze(np.abs(X[:, np.newaxis] - clusters[np.newaxis, :]))
- 
-        # find the cluster that's closest to each point
-        closestCluster = np.argmin(distances, axis=1)
- 
-        # update clusters by taking the mean of all of the points assigned to that cluster
-        for i in range(k):
-            pointsForCluster = X[closestCluster == i]
-            if len(pointsForCluster) > 0:
-                clusters[i] = np.mean(pointsForCluster, axis=0)
- 
-        # converge if clusters haven't moved
-        converged = np.linalg.norm(clusters - prevClusters) < 1e-6
-        prevClusters = clusters.copy()
- 
-    distances = np.squeeze(np.abs(X[:, np.newaxis] - clusters[np.newaxis, :]))
-    closestCluster = np.argmin(distances, axis=1)
- 
-    clustersWithNoPoints = []
-    for i in range(k):
-        pointsForCluster = X[closestCluster == i]
-        if len(pointsForCluster) < 2:
-            # keep track of clusters with no points or 1 point
-            clustersWithNoPoints.append(i)
-            continue
-        else:
-            stds[i] = np.std(X[closestCluster == i])
- 
-    # if there are clusters with 0 or 1 points, take the mean std of the other clusters
-    if len(clustersWithNoPoints) > 0:
-        pointsToAverage = []
-        for i in range(k):
-            if i not in clustersWithNoPoints:
-                pointsToAverage.append(X[closestCluster == i])
-        pointsToAverage = np.concatenate(pointsToAverage).ravel()
-        stds[clustersWithNoPoints] = np.mean(np.std(pointsToAverage))
- 
-    return clusters, stds
+import random
+import math
 
 
-def rbf(x, c, s):
-    return np.exp(-1 / (2 * s**2) * (x-c)**2)
+class RBFNetwork(object):
 
-class RBFNet(object):
-    """Implementation of a Radial Basis Function Network"""
-    def __init__(self, k=2, lr=0.01, epochs=100, rbf=rbf, inferStds=True):
-        self.k = k
-        self.lr = lr
-        self.epochs = epochs
-        self.rbf = rbf
-        self.inferStds = inferStds
- 
-        self.w = np.random.randn(k)
-        self.b = np.random.randn(1)
+    def __init__(self, n_neurons, eta=0.01, method='lms'):
+        self.n_neurons = n_neurons
+        self.centers = None
+        self.data_centers = None
+        self.eta = eta
+        self.weights = [random.randint(-1, 1) for _ in range(n_neurons)]
+        self.method = method
 
-    def fit(self, X, y):
-        if self.inferStds:
-            # compute stds from data
-            self.centers, self.stds = kmeans(X, self.k)
-        else:
-            # use a fixed std 
-            self.centers, _ = kmeans(X, self.k)
-            dMax = max([np.abs(c1 - c2) for c1 in self.centers for c2 in self.centers])
-            self.stds = np.repeat(dMax / np.sqrt(2*self.k), self.k)
+    def rbf_function(self, center, data_point, sigma):
+        return np.exp(-sigma*np.linalg.norm(center-data_point)**2)
 
-        # training
-        for epoch in range(self.epochs):
-            for i in range(X.shape[0]):
-                # forward pass
-                a = np.array([self.rbf(X[i], c, s) for c, s, in zip(self.centers, self.stds)])
-                F = a.T.dot(self.w) + self.b
+    def _rbf_activation_matrix(self, X):
+        matrix = np.zeros((len(X), self.n_neurons))
+        for data_point_arg, data_point in enumerate(X):
+            for center_arg, center in enumerate(self.centers):
+                sigma = self.sigmas[center_arg]
+                matrix[data_point_arg, center_arg] = self.rbf_function(
+                    center, data_point, sigma)
+        return matrix
 
-                loss = (y[i] - F).flatten() ** 2
-                print('Loss: {0:.2f}'.format(loss[0]))
+    def cluster(self, X):
+        centers, data_centers, sigmas = kmeans(
+            X, self.n_neurons, 'kmeanspp', 100)
+        return centers, data_centers, sigmas
 
-                # backward pass
-                error = -(y[i] - F).flatten()
+    def fit(self, X, Y):
+        self.centers, self.data_centers, self.sigmas = self.cluster(X)
 
-                # online update
-                self.w = self.w - self.lr * a * error
-                self.b = self.b - self.lr * error
-    
+        if self.method == 'lms':
+            matrix = self._rbf_activation_matrix(X)
+            self.weights = np.dot(np.linalg.pinv(matrix), Y)
+
+            return
+
+        epochs = 1000
+        for _ in range(epochs):
+            for x, y_d in zip(X, Y):
+                activations = []
+
+                for center_data_belongs in range(len(self.centers)):
+                    center = self.centers[center_data_belongs]
+                    sigma = self.sigmas[center_data_belongs]
+
+                    activations.append(self.rbf_function(center, x, sigma))
+
+                y_pred_list = [w*a for w,
+                               a in zip(self.weights, activations)]
+
+                y_pred = sum(y_pred_list)
+
+                error = y_d - y_pred
+
+                self.weights = [w + self.eta*error*x_i for x_i,
+                                w in zip(activations, self.weights)]
+
     def predict(self, X):
+        if self.method == 'lms':
+            matrix = self._rbf_activation_matrix(X)
+            predictions = np.dot(matrix, self.weights)
+
+            return predictions
+
         y_pred = []
-        for i in range(X.shape[0]):
-            a = np.array([self.rbf(X[i], c, s) for c, s, in zip(self.centers, self.stds)])
-            F = a.T.dot(self.w) + self.b
-            y_pred.append(F)
-        return np.array(y_pred)
+
+        for x in X:
+            activations = []
+
+            for center_data_belongs in range(len(self.centers)):
+                center = self.centers[center_data_belongs]
+                sigma = self.sigmas[center_data_belongs]
+
+                activations.append(self.rbf_function(center, x, sigma))
+
+            y_pred_list = [w*a for w,
+                           a in zip(self.weights, activations)]
+
+            y_pred.append(sum(y_pred_list))
+
+        return y_pred
 
 
-# sample inputs and add noise
-NUM_SAMPLES = 100
-X = np.random.uniform(0., 1., NUM_SAMPLES)
-X = np.sort(X, axis=0)
-noise = np.random.uniform(-0.1, 0.1, NUM_SAMPLES)
-y = np.sin(2 * np.pi * X)  + noise
- 
-rbfnet = RBFNet(lr=1e-2, k=2)
-rbfnet.fit(X, y)
- 
-y_pred = rbfnet.predict(X)
- 
-plt.plot(X, y, '-o', label='true')
-plt.plot(X, y_pred, '-o', label='RBF-Net')
+iris = datasets.load_iris()
+
+x = np.array(iris['data'])
+y = np.array(iris['target'])
+
+model = RBFNetwork(n_neurons=50, eta=0.01, method='lms')
+model.fit(x, y)
+
+y_pred = model.predict(x)
+
+plt.plot(x, y, 'x', label='iris')
+plt.plot(x, y_pred, 'o', label='RBF-Net')
+
 plt.legend()
- 
-plt.tight_layout()
 plt.show()
